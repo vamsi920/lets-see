@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import AVFoundation
+import Carbon.HIToolbox
 import CoreGraphics
 import SwiftUI
 
@@ -17,32 +18,63 @@ struct LetsSeeApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let model = AssistantAppModel.shared
     private var menuBarButton: MenuBarButton?
-    private var panelController: AssistantPanelController?
+    private var mainWindowController: MainWindowController?
+    private var quickLauncherController: QuickLauncherController?
     private var hotKeyMonitor: GlobalHotKeyMonitor?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory)
+        NSApp.setActivationPolicy(.regular)
+        applyAppAppearance(AppAppearanceMode.stored)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAppearanceModeDidChange(_:)),
+            name: .appAppearanceModeDidChange,
+            object: nil
+        )
 
-        let controller = AssistantPanelController(model: model)
-        panelController = controller
-        model.connect(panelController: controller)
+        let mainController = MainWindowController(model: model)
+        let quickController = QuickLauncherController(model: model)
+
+        mainWindowController = mainController
+        quickLauncherController = quickController
+        model.connect(mainWindowController: mainController, quickLauncherController: quickController)
 
         menuBarButton = MenuBarButton()
-        hotKeyMonitor = GlobalHotKeyMonitor {
+        hotKeyMonitor = GlobalHotKeyMonitor(
+            keyCode: UInt32(kVK_Space),
+            modifiers: UInt32(controlKey) | UInt32(optionKey)
+        ) {
             Task { @MainActor in
-                AssistantAppModel.shared.togglePanel()
+                AssistantAppModel.shared.toggleQuickLauncher()
             }
         }
 
         model.refreshPermissions()
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
-            self?.model.showPanel()
+            self?.model.showMainWindow()
         }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag {
+            model.showMainWindow()
+        }
+
+        return true
+    }
+
+    @objc
+    private func handleAppearanceModeDidChange(_ notification: Notification) {
+        if let mode = notification.object as? AppAppearanceMode {
+            applyAppAppearance(mode)
+        } else {
+            applyAppAppearance(AppAppearanceMode.stored)
+        }
     }
 }
 
@@ -146,6 +178,139 @@ enum PermissionStatus: Equatable {
     }
 }
 
+enum AppAppearanceMode: String, CaseIterable, Identifiable {
+    case dark
+    case light
+
+    static let storageKey = "appearance.mode"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .dark:
+            return "Dark"
+        case .light:
+            return "Light"
+        }
+    }
+
+    var nsAppearanceName: NSAppearance.Name {
+        switch self {
+        case .dark:
+            return .darkAqua
+        case .light:
+            return .aqua
+        }
+    }
+
+    static var stored: AppAppearanceMode {
+        AppAppearanceMode(rawValue: UserDefaults.standard.string(forKey: storageKey) ?? "") ?? .light
+    }
+
+    static func store(_ mode: AppAppearanceMode) {
+        UserDefaults.standard.set(mode.rawValue, forKey: storageKey)
+        NotificationCenter.default.post(name: .appAppearanceModeDidChange, object: mode)
+    }
+}
+
+extension Notification.Name {
+    static let appAppearanceModeDidChange = Notification.Name("appAppearanceModeDidChange")
+}
+
+@MainActor
+func applyAppAppearance(_ mode: AppAppearanceMode) {
+    NSApp.appearance = NSAppearance(named: mode.nsAppearanceName)
+}
+
+struct AppThemePalette {
+    let isLight: Bool
+    let canvasTop: Color
+    let canvasMid: Color
+    let canvasBottom: Color
+    let starColor: Color
+    let horizonPrimary: Color
+    let horizonSecondary: Color
+    let horizonEdge: Color
+    let warmGlow: Color
+    let coolGlow: Color
+    let bottomFade: Color
+    let surfaceFill: Color
+    let surfaceStroke: Color
+    let chipFill: Color
+    let chipText: Color
+    let textPrimary: Color
+    let textSecondary: Color
+    let textTertiary: Color
+    let accent: Color
+    let accentText: Color
+    let panelShadow: Color
+    let insetFill: Color
+    let insetStroke: Color
+    let railFill: Color
+}
+
+extension AppThemePalette {
+    static func make(_ mode: AppAppearanceMode) -> AppThemePalette {
+        switch mode {
+        case .dark:
+            return AppThemePalette(
+                isLight: false,
+                canvasTop: Color(red: 0.07, green: 0.09, blue: 0.13),
+                canvasMid: Color(red: 0.05, green: 0.07, blue: 0.10),
+                canvasBottom: Color(red: 0.08, green: 0.09, blue: 0.13),
+                starColor: Color.white.opacity(0.60),
+                horizonPrimary: Color(red: 0.20, green: 0.25, blue: 0.37),
+                horizonSecondary: Color(red: 0.08, green: 0.11, blue: 0.17),
+                horizonEdge: Color(red: 0.50, green: 0.67, blue: 0.98),
+                warmGlow: Color(red: 0.74, green: 0.48, blue: 0.26).opacity(0.22),
+                coolGlow: Color(red: 0.27, green: 0.42, blue: 0.82).opacity(0.20),
+                bottomFade: Color.black.opacity(0.38),
+                surfaceFill: Color(red: 0.07, green: 0.09, blue: 0.13).opacity(0.72),
+                surfaceStroke: Color.white.opacity(0.08),
+                chipFill: Color.white.opacity(0.05),
+                chipText: Color.white.opacity(0.82),
+                textPrimary: Color.white.opacity(0.94),
+                textSecondary: Color.white.opacity(0.66),
+                textTertiary: Color.white.opacity(0.42),
+                accent: Color(red: 0.86, green: 0.66, blue: 0.43),
+                accentText: Color(red: 0.12, green: 0.09, blue: 0.07),
+                panelShadow: Color.black.opacity(0.44),
+                insetFill: Color.white.opacity(0.035),
+                insetStroke: Color.white.opacity(0.08),
+                railFill: Color.white.opacity(0.025)
+            )
+        case .light:
+            return AppThemePalette(
+                isLight: true,
+                canvasTop: Color(red: 0.95, green: 0.97, blue: 0.995),
+                canvasMid: Color(red: 0.88, green: 0.92, blue: 0.97),
+                canvasBottom: Color(red: 0.80, green: 0.86, blue: 0.95),
+                starColor: Color.white.opacity(0.30),
+                horizonPrimary: Color(red: 0.93, green: 0.96, blue: 1.0),
+                horizonSecondary: Color(red: 0.74, green: 0.82, blue: 0.94),
+                horizonEdge: Color(red: 0.47, green: 0.62, blue: 0.88),
+                warmGlow: Color(red: 0.88, green: 0.74, blue: 0.61).opacity(0.24),
+                coolGlow: Color(red: 0.52, green: 0.67, blue: 0.92).opacity(0.22),
+                bottomFade: Color(red: 0.77, green: 0.84, blue: 0.94).opacity(0.36),
+                surfaceFill: Color(red: 0.95, green: 0.97, blue: 0.995).opacity(0.82),
+                surfaceStroke: Color(red: 0.21, green: 0.29, blue: 0.39).opacity(0.08),
+                chipFill: Color(red: 0.83, green: 0.88, blue: 0.96).opacity(0.46),
+                chipText: Color(red: 0.17, green: 0.22, blue: 0.30),
+                textPrimary: Color(red: 0.12, green: 0.17, blue: 0.24),
+                textSecondary: Color(red: 0.27, green: 0.33, blue: 0.43),
+                textTertiary: Color(red: 0.42, green: 0.49, blue: 0.58),
+                accent: Color(red: 0.35, green: 0.51, blue: 0.80),
+                accentText: Color.white,
+                panelShadow: Color(red: 0.41, green: 0.51, blue: 0.70).opacity(0.14),
+                insetFill: Color(red: 0.89, green: 0.93, blue: 0.98).opacity(0.78),
+                insetStroke: Color.white.opacity(0.48),
+                railFill: Color(red: 0.83, green: 0.88, blue: 0.95).opacity(0.40)
+            )
+        }
+    }
+}
+
 struct PermissionSnapshot: Identifiable {
     let kind: PermissionKind
     let status: PermissionStatus
@@ -200,21 +365,23 @@ private struct DemoStep {
 final class AssistantAppModel: ObservableObject {
     static let shared = AssistantAppModel()
 
-    let hotKeyDisplay = "Option + Command + Space"
-    let hotKeySymbols = "\u{2325}\u{2318}Space"
+    let hotKeyDisplay = "Control + Option + Space"
+    let hotKeySymbols = "\u{2303}\u{2325}Space"
 
     @Published var commandText = ""
     @Published var statusTitle = "Ready for the first command"
-    @Published var statusDetail = "Type “Open Notes” to preview a real-looking desktop run, even while the executor is still stubbed."
+    @Published var statusDetail = "Type “Open Notes” to preview a real-looking desktop run while the executor is still stubbed."
     @Published var progressValue = 0.0
     @Published var isRunning = false
     @Published var isListening = false
     @Published private(set) var panelVisible = false
+    @Published private(set) var mainWindowVisible = false
     @Published private(set) var permissionSnapshots: [PermissionSnapshot] = []
     @Published private(set) var activityItems: [ActivityItem] = []
     @Published var inputFocusTicket = UUID()
 
-    private weak var panelController: AssistantPanelController?
+    private weak var mainWindowController: MainWindowController?
+    private weak var quickLauncherController: QuickLauncherController?
     private var runTask: Task<Void, Never>?
     private var listeningTask: Task<Void, Never>?
 
@@ -231,24 +398,43 @@ final class AssistantAppModel: ObservableObject {
         permissionSnapshots.filter { $0.status == .needsAttention }.count
     }
 
-    func connect(panelController: AssistantPanelController) {
-        self.panelController = panelController
+    func connect(mainWindowController: MainWindowController, quickLauncherController: QuickLauncherController) {
+        self.mainWindowController = mainWindowController
+        self.quickLauncherController = quickLauncherController
     }
 
-    func togglePanel() {
-        panelController?.toggle()
+    func toggleQuickLauncher() {
+        quickLauncherController?.toggle()
     }
 
-    func showPanel(focusInput: Bool = true) {
-        panelController?.show(focusInput: focusInput)
+    func showQuickLauncher(focusInput: Bool = true) {
+        quickLauncherController?.show(focusInput: focusInput)
     }
 
-    func hidePanel() {
-        panelController?.hide()
+    func hideQuickLauncher() {
+        quickLauncherController?.hide()
     }
 
-    func markPanelVisibility(_ isVisible: Bool) {
+    func showMainWindow(focusInput: Bool = true) {
+        quickLauncherController?.hide()
+        mainWindowController?.show(focusInput: focusInput)
+    }
+
+    func hideMainWindow() {
+        mainWindowController?.hide()
+    }
+
+    func markQuickLauncherVisibility(_ isVisible: Bool) {
         panelVisible = isVisible
+
+        if isVisible {
+            refreshPermissions()
+            inputFocusTicket = UUID()
+        }
+    }
+
+    func markMainWindowVisibility(_ isVisible: Bool) {
+        mainWindowVisible = isVisible
 
         if isVisible {
             refreshPermissions()
@@ -270,7 +456,7 @@ final class AssistantAppModel: ObservableObject {
         isListening = false
         isRunning = true
         progressValue = 0.08
-        showPanel(focusInput: false)
+        presentInteractionSurface(focusInput: false)
 
         appendActivity(
             title: "Command received",
@@ -486,7 +672,7 @@ final class AssistantAppModel: ObservableObject {
         progressValue = 0.22
         statusTitle = "Listening for a voice prompt"
         statusDetail = "Phase 1 simulates capture so the shell feels alive before transcription is wired in."
-        showPanel(focusInput: false)
+        presentInteractionSurface(focusInput: false)
 
         appendActivity(
             title: "Voice preview started",
@@ -528,13 +714,13 @@ final class AssistantAppModel: ObservableObject {
     private func seedActivity() {
         appendActivity(
             title: "Assistant shell booted",
-            detail: "Started from the open-source macOS SwiftUI template and reshaped into a floating desktop assistant.",
+            detail: "Started from the open-source macOS SwiftUI template and reshaped into a resident Mac assistant.",
             symbol: "sparkles",
             tone: .info
         )
         appendActivity(
             title: "Hotkey armed",
-            detail: "Press \(hotKeyDisplay) from anywhere to toggle the panel.",
+            detail: "Press \(hotKeyDisplay) from anywhere to open the quick launcher.",
             symbol: "keyboard",
             tone: .neutral
         )
@@ -653,5 +839,13 @@ final class AssistantAppModel: ObservableObject {
                 tone: tone
             )
         )
+    }
+
+    private func presentInteractionSurface(focusInput: Bool) {
+        if mainWindowVisible {
+            showMainWindow(focusInput: focusInput)
+        } else {
+            showQuickLauncher(focusInput: focusInput)
+        }
     }
 }

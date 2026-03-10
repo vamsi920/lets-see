@@ -2,48 +2,43 @@ import SwiftUI
 
 struct MainView: View {
     @ObservedObject private var model = AssistantAppModel.shared
+    @AppStorage(AppAppearanceMode.storageKey) private var appearanceModeRawValue = AppAppearanceMode.stored.rawValue
     @FocusState private var isComposerFocused: Bool
+
+    private var appearanceMode: AppAppearanceMode {
+        AppAppearanceMode(rawValue: appearanceModeRawValue) ?? .light
+    }
+
+    private var theme: AppThemePalette {
+        .make(appearanceMode)
+    }
 
     var body: some View {
         ZStack {
-            VisualEffectView(material: .hudWindow, blendingMode: .withinWindow)
-                .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+            SpaceBackdropView()
 
-            backgroundGlow
+            VStack(spacing: 0) {
+                topBar
+                    .padding(.horizontal, 34)
+                    .padding(.top, 24)
 
-            VStack(alignment: .leading, spacing: 18) {
-                header
-                PermissionStripView(snapshots: model.permissionSnapshots)
+                Spacer()
 
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("Command")
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.55))
-                        .textCase(.uppercase)
+                VStack(spacing: 18) {
+                    composerCard
+                        .frame(maxWidth: 860)
 
-                    composer
+                    suggestionRow
+
+                    bottomRow
+                        .frame(maxWidth: 920)
                 }
 
-                RunStateCard(
-                    title: model.statusTitle,
-                    detail: model.statusDetail,
-                    isRunning: model.isRunning,
-                    isListening: model.isListening,
-                    progress: model.progressValue
-                )
-
-                ActivityFeedView(items: model.activityItems)
+                Spacer()
             }
-            .padding(24)
+            .padding(.bottom, 34)
         }
-        .frame(width: 880, height: 640)
-        .background(Color.clear)
-        .overlay(
-            RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.35), radius: 30, y: 18)
-        .padding(10)
+        .preferredColorScheme(theme.isLight ? .light : .dark)
         .onAppear {
             DispatchQueue.main.async {
                 isComposerFocused = true
@@ -56,229 +51,287 @@ struct MainView: View {
         }
     }
 
-    private var header: some View {
-        HStack(alignment: .top, spacing: 18) {
-            HStack(spacing: 14) {
-                ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    Color(red: 0.99, green: 0.75, blue: 0.42),
-                                    Color(red: 0.94, green: 0.46, blue: 0.34)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
+    private var topBar: some View {
+        HStack(spacing: 18) {
+            HStack(spacing: 12) {
+                BrandMark(size: 30)
 
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundStyle(Color(red: 0.17, green: 0.12, blue: 0.10))
-                }
-                .frame(width: 50, height: 50)
-
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 3) {
                     Text("LetsSee")
-                        .font(.system(size: 31, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
+                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+                        .foregroundStyle(theme.textPrimary)
 
-                    Text("Desktop assistant shell for the first 20 seconds. Hotkey, trust states, and a believable run loop are already in place.")
-                        .font(.system(size: 14, weight: .medium, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.72))
-                        .fixedSize(horizontal: false, vertical: true)
+                    Text("Resident Mac assistant")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(theme.textTertiary)
                 }
             }
 
             Spacer()
 
-            VStack(alignment: .trailing, spacing: 10) {
-                hotKeyBadge
-
-                HStack(spacing: 8) {
-                    metricPill(title: "Panel", value: model.panelVisible ? "Live" : "Hidden")
-                    metricPill(title: "Trust", value: "\(model.grantedPermissionCount)/4")
-                }
-
-                Button {
-                    model.hidePanel()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.78))
-                        .frame(width: 28, height: 28)
-                        .background(Color.white.opacity(0.08), in: Circle())
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
-    private var composer: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 12) {
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .fill(Color.white.opacity(0.08))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                                .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                        )
-
-                    TextField("Ask the Mac to do something", text: $model.commandText)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 20, weight: .medium, design: .rounded))
-                        .foregroundStyle(.white)
-                        .focused($isComposerFocused)
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 16)
-                        .onSubmit {
-                            model.runCurrentCommand()
-                        }
-                }
-                .frame(height: 62)
-
-                Button {
-                    model.toggleMicrophone()
-                } label: {
-                    ZStack {
-                        Circle()
-                            .fill(model.isListening ? Color(red: 0.99, green: 0.75, blue: 0.42) : Color.white.opacity(0.09))
-
-                        Circle()
-                            .stroke(model.isListening ? Color.white.opacity(0.45) : Color.white.opacity(0.08), lineWidth: 1)
-
-                        Image(systemName: model.isListening ? "waveform.circle.fill" : "mic.fill")
-                            .font(.system(size: 22, weight: .bold))
-                            .foregroundStyle(model.isListening ? Color(red: 0.15, green: 0.11, blue: 0.10) : .white.opacity(0.82))
-                    }
-                    .frame(width: 62, height: 62)
-                    .scaleEffect(model.isListening ? 1.04 : 1)
-                    .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: model.isListening)
-                }
-                .buttonStyle(.plain)
-            }
-
             HStack(spacing: 10) {
-                promptSuggestion("Open Notes")
-                promptSuggestion("Search Downloads")
-                promptSuggestion("Create reminder")
-
-                Spacer()
-
-                Button("Stop") {
-                    model.stopRun()
-                }
-                .buttonStyle(.plain)
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
-                .foregroundStyle((model.isRunning || model.isListening) ? .white : .white.opacity(0.35))
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(Color.white.opacity((model.isRunning || model.isListening) ? 0.10 : 0.04), in: Capsule())
-                .disabled(!model.isRunning && !model.isListening)
+                themeToggle
+                topChip(icon: "keyboard", value: model.hotKeySymbols)
 
                 Button {
-                    model.runCurrentCommand()
+                    SettingsWindow.show()
                 } label: {
-                    Label(model.isRunning ? "Running" : "Run", systemImage: model.isRunning ? "bolt.fill" : "play.fill")
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color(red: 0.16, green: 0.11, blue: 0.10))
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 12)
-                        .background(
-                            LinearGradient(
-                                colors: [
-                                    Color(red: 0.99, green: 0.75, blue: 0.42),
-                                    Color(red: 0.98, green: 0.60, blue: 0.31)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            in: Capsule()
-                        )
+                    topChip(icon: "lock.shield", value: "\(model.grantedPermissionCount)/4")
                 }
                 .buttonStyle(.plain)
-                .disabled(model.commandText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
     }
 
-    private var hotKeyBadge: some View {
-        VStack(alignment: .trailing, spacing: 5) {
-            Text("Global Hotkey")
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundStyle(.white.opacity(0.52))
-                .textCase(.uppercase)
+    private var composerCard: some View {
+        GlassPanel(cornerRadius: 34) {
+            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("How can LetsSee help today?")
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundStyle(theme.textTertiary)
 
-            Text(model.hotKeySymbols)
-                .font(.system(size: 14, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color.white.opacity(0.08), in: Capsule())
+                    HStack(alignment: .top, spacing: 18) {
+                        VStack(alignment: .leading, spacing: 14) {
+                            TextField("Ask the Mac to do something", text: $model.commandText)
+                                .textFieldStyle(.plain)
+                                .font(.system(size: 34, weight: .regular, design: .rounded))
+                                .foregroundStyle(theme.textPrimary)
+                                .focused($isComposerFocused)
+                                .onSubmit {
+                                    model.runCurrentCommand()
+                                }
+
+                            Text(model.statusDetail)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(theme.textSecondary)
+                                .lineLimit(2)
+                        }
+
+                        Spacer(minLength: 0)
+
+                        Button {
+                            model.toggleMicrophone()
+                        } label: {
+                            Image(systemName: model.isListening ? "waveform.circle.fill" : "mic")
+                                .font(.system(size: 19, weight: .medium))
+                                .foregroundStyle(model.isListening ? theme.accent : theme.textSecondary)
+                                .frame(width: 48, height: 48)
+                                .background(theme.chipFill, in: Circle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 28)
+                .padding(.top, 28)
+                .padding(.bottom, 24)
+
+                Divider()
+                    .overlay(theme.surfaceStroke.opacity(theme.isLight ? 0.9 : 1))
+
+                HStack(spacing: 12) {
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(statusColor)
+                            .frame(width: 8, height: 8)
+
+                        Text(statusLabel)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(theme.textPrimary)
+
+                        Text(model.statusTitle)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(theme.textTertiary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer()
+
+                    if model.isRunning || model.isListening {
+                        Button("Stop") {
+                            model.stopRun()
+                        }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(theme.textSecondary)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(theme.chipFill, in: Capsule())
+                    }
+
+                    Button {
+                        model.runCurrentCommand()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: model.isRunning ? "bolt.fill" : "arrow.up.right")
+                                .font(.system(size: 11, weight: .semibold))
+
+                            Text(model.isRunning ? "Running" : "Run")
+                                .font(.system(size: 12, weight: .semibold))
+                        }
+                        .foregroundStyle(theme.accentText)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 10)
+                        .background(theme.accent, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(model.commandText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                .padding(.horizontal, 28)
+                .padding(.vertical, 18)
+            }
         }
     }
 
-    private var backgroundGlow: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.10, green: 0.12, blue: 0.16),
-                    Color(red: 0.06, green: 0.08, blue: 0.12)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-
-            Circle()
-                .fill(Color(red: 0.94, green: 0.46, blue: 0.34).opacity(0.16))
-                .frame(width: 300, height: 300)
-                .blur(radius: 30)
-                .offset(x: -240, y: -190)
-
-            Circle()
-                .fill(Color(red: 0.36, green: 0.67, blue: 0.96).opacity(0.14))
-                .frame(width: 280, height: 280)
-                .blur(radius: 26)
-                .offset(x: 240, y: 170)
+    private var suggestionRow: some View {
+        HStack(spacing: 10) {
+            suggestionChip("Open Notes")
+            suggestionChip("Search Downloads")
+            suggestionChip("Create Reminder")
         }
-        .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
     }
 
-    private func metricPill(title: String, value: String) -> some View {
-        VStack(alignment: .trailing, spacing: 3) {
-            Text(title)
-                .font(.system(size: 10, weight: .semibold, design: .rounded))
-                .foregroundStyle(.white.opacity(0.46))
-                .textCase(.uppercase)
+    private var bottomRow: some View {
+        HStack(alignment: .top, spacing: 14) {
+            PermissionStripView(snapshots: model.permissionSnapshots, compact: true)
+                .frame(maxWidth: .infinity)
+
+            RecentActivityCard(items: model.activityItems)
+                .frame(width: 280)
+        }
+    }
+
+    private var themeToggle: some View {
+        HStack(spacing: 4) {
+            ForEach(AppAppearanceMode.allCases) { mode in
+                Button {
+                    setAppearance(mode)
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: mode == .light ? "sun.min.fill" : "moon.fill")
+                            .font(.system(size: 10, weight: .medium))
+
+                        Text(mode.title)
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .foregroundStyle(mode == appearanceMode ? theme.accentText : theme.chipText)
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule()
+                            .fill(mode == appearanceMode ? theme.accent : Color.clear)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(4)
+        .background(theme.chipFill, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(theme.surfaceStroke.opacity(theme.isLight ? 0.8 : 0.6), lineWidth: 1)
+        )
+    }
+
+    private func topChip(icon: String, value: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(theme.textSecondary)
 
             Text(value)
-                .font(.system(size: 13, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(theme.textPrimary)
+                .monospacedDigit()
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color.white.opacity(0.06), in: Capsule())
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .background(theme.chipFill, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(theme.surfaceStroke.opacity(theme.isLight ? 0.8 : 0.6), lineWidth: 1)
+        )
     }
 
-    private func promptSuggestion(_ text: String) -> some View {
+    private func suggestionChip(_ prompt: String) -> some View {
         Button {
-            model.commandText = text
+            model.commandText = prompt
             isComposerFocused = true
         } label: {
-            Text(text)
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                .foregroundStyle(.white.opacity(0.72))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .background(Color.white.opacity(0.06), in: Capsule())
+            Text(prompt)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(theme.textSecondary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(theme.chipFill, in: Capsule())
         }
         .buttonStyle(.plain)
+    }
+
+    private var statusLabel: String {
+        if model.isListening {
+            return "Listening"
+        }
+
+        if model.isRunning {
+            return "Running"
+        }
+
+        return "Ready"
+    }
+
+    private var statusColor: Color {
+        if model.isListening {
+            return theme.accent
+        }
+
+        if model.isRunning {
+            return Color(red: 0.43, green: 0.67, blue: 0.95)
+        }
+
+        return Color(red: 0.38, green: 0.77, blue: 0.61)
+    }
+
+    private func setAppearance(_ mode: AppAppearanceMode) {
+        AppAppearanceMode.store(mode)
+        appearanceModeRawValue = mode.rawValue
+    }
+}
+
+struct BrandMark: View {
+    let size: CGFloat
+    @AppStorage(AppAppearanceMode.storageKey) private var appearanceModeRawValue = AppAppearanceMode.stored.rawValue
+
+    private var appearanceMode: AppAppearanceMode {
+        AppAppearanceMode(rawValue: appearanceModeRawValue) ?? .light
+    }
+
+    private var theme: AppThemePalette {
+        .make(appearanceMode)
+    }
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            RoundedRectangle(cornerRadius: size * 0.34, style: .continuous)
+                .stroke(theme.textPrimary.opacity(theme.isLight ? 0.22 : 0.28), lineWidth: 1.2)
+                .frame(width: size, height: size)
+
+            RoundedRectangle(cornerRadius: size * 0.20, style: .continuous)
+                .stroke(theme.textPrimary.opacity(0.84), lineWidth: 1.8)
+                .padding(size * 0.17)
+
+            Circle()
+                .fill(theme.accent)
+                .frame(width: size * 0.20, height: size * 0.20)
+                .offset(x: size * 0.08, y: -size * 0.08)
+        }
+        .frame(width: size, height: size)
     }
 }
 
 struct MainView_Previews: PreviewProvider {
     static var previews: some View {
         MainView()
+            .frame(width: 1420, height: 900)
     }
 }

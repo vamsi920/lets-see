@@ -2,11 +2,20 @@ import SwiftUI
 
 struct GeneralSettingsTab: View {
     @ObservedObject private var model = AssistantAppModel.shared
+    @AppStorage(AppAppearanceMode.storageKey) private var appearanceModeRawValue = AppAppearanceMode.stored.rawValue
 
     private let columns = [
         GridItem(.flexible(), spacing: 18),
         GridItem(.flexible(), spacing: 18)
     ]
+
+    private var appearanceMode: AppAppearanceMode {
+        AppAppearanceMode(rawValue: appearanceModeRawValue) ?? .light
+    }
+
+    private var theme: AppThemePalette {
+        .make(appearanceMode)
+    }
 
     var body: some View {
         ScrollView {
@@ -34,25 +43,29 @@ struct GeneralSettingsTab: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Permissions & Trust")
                         .font(.system(size: 34, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color(red: 0.16, green: 0.13, blue: 0.10))
+                        .foregroundStyle(theme.textPrimary)
 
                     Text("This page is designed to feel finished before the agent is finished. It shows the permissions judges expect to see, along with real macOS trust checks where they matter.")
                         .font(.system(size: 15, weight: .medium, design: .rounded))
-                        .foregroundStyle(Color(red: 0.34, green: 0.30, blue: 0.24))
+                        .foregroundStyle(theme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer()
 
-                Button("Refresh") {
-                    model.refreshPermissions()
+                HStack(spacing: 10) {
+                    themeToggle
+
+                    Button("Refresh") {
+                        model.refreshPermissions()
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundStyle(theme.textPrimary)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(theme.chipFill, in: Capsule())
                 }
-                .buttonStyle(.plain)
-                .font(.system(size: 14, weight: .bold, design: .rounded))
-                .foregroundStyle(Color(red: 0.17, green: 0.13, blue: 0.10))
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(Color.white.opacity(0.78), in: Capsule())
             }
 
             HStack(spacing: 12) {
@@ -64,11 +77,11 @@ struct GeneralSettingsTab: View {
         .padding(24)
         .background(
             RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .fill(Color.white.opacity(0.72))
+                .fill(theme.surfaceFill.opacity(theme.isLight ? 0.96 : 0.88))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .stroke(Color.white.opacity(0.65), lineWidth: 1)
+                .stroke(theme.surfaceStroke.opacity(theme.isLight ? 1 : 0.85), lineWidth: 1)
         )
     }
 
@@ -76,22 +89,22 @@ struct GeneralSettingsTab: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Phase 1 Notes")
                 .font(.system(size: 14, weight: .bold, design: .rounded))
-                .foregroundStyle(Color(red: 0.18, green: 0.14, blue: 0.11))
+                .foregroundStyle(theme.textPrimary)
 
             Text("Accessibility, Microphone, and Screen Recording are wired to real system checks. Automation remains on-demand because macOS only reveals that trust after the first Apple Events action against a target app.")
                 .font(.system(size: 14, weight: .medium, design: .rounded))
-                .foregroundStyle(Color(red: 0.38, green: 0.33, blue: 0.27))
+                .foregroundStyle(theme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             Text("This is the right tradeoff for the hackathon shell: the UI reads like a product now, and the executor can be swapped in without reworking the trust surface later.")
                 .font(.system(size: 14, weight: .medium, design: .rounded))
-                .foregroundStyle(Color(red: 0.38, green: 0.33, blue: 0.27))
+                .foregroundStyle(theme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(22)
         .background(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(Color(red: 0.21, green: 0.17, blue: 0.14))
+                .fill(theme.surfaceFill.opacity(theme.isLight ? 0.84 : 0.72))
         )
     }
 
@@ -99,19 +112,51 @@ struct GeneralSettingsTab: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(.system(size: 10, weight: .semibold, design: .rounded))
-                .foregroundStyle(Color(red: 0.49, green: 0.43, blue: 0.36))
+                .foregroundStyle(theme.textTertiary)
                 .textCase(.uppercase)
 
             Text(value)
                 .font(.system(size: 15, weight: .bold, design: .rounded))
-                .foregroundStyle(Color(red: 0.16, green: 0.13, blue: 0.10))
+                .foregroundStyle(theme.textPrimary)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.white.opacity(0.8))
+                .fill(theme.chipFill)
         )
+    }
+
+    private var themeToggle: some View {
+        HStack(spacing: 4) {
+            ForEach(AppAppearanceMode.allCases) { mode in
+                Button {
+                    setAppearance(mode)
+                } label: {
+                    Text(mode.title)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(mode == appearanceMode ? theme.accentText : theme.chipText)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            Capsule()
+                                .fill(mode == appearanceMode ? theme.accent : Color.clear)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(4)
+        .background(theme.chipFill, in: Capsule())
+        .overlay(
+            Capsule()
+                .stroke(theme.surfaceStroke.opacity(theme.isLight ? 0.9 : 0.7), lineWidth: 1)
+        )
+    }
+
+    private func setAppearance(_ mode: AppAppearanceMode) {
+        AppAppearanceMode.store(mode)
+        appearanceModeRawValue = mode.rawValue
     }
 }
 
@@ -119,6 +164,15 @@ private struct PermissionCard: View {
     let snapshot: PermissionSnapshot
     let primaryAction: () -> Void
     let secondaryAction: () -> Void
+    @AppStorage(AppAppearanceMode.storageKey) private var appearanceModeRawValue = AppAppearanceMode.stored.rawValue
+
+    private var appearanceMode: AppAppearanceMode {
+        AppAppearanceMode(rawValue: appearanceModeRawValue) ?? .light
+    }
+
+    private var theme: AppThemePalette {
+        .make(appearanceMode)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -146,16 +200,16 @@ private struct PermissionCard: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text(snapshot.kind.title)
                     .font(.system(size: 20, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color(red: 0.17, green: 0.13, blue: 0.10))
+                    .foregroundStyle(theme.textPrimary)
 
                 Text(snapshot.summary)
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Color(red: 0.32, green: 0.28, blue: 0.23))
+                    .foregroundStyle(theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text(snapshot.detail)
                     .font(.system(size: 13, weight: .medium, design: .rounded))
-                    .foregroundStyle(Color(red: 0.42, green: 0.37, blue: 0.31))
+                    .foregroundStyle(theme.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -167,31 +221,31 @@ private struct PermissionCard: View {
                 }
                 .buttonStyle(.plain)
                 .font(.system(size: 13, weight: .bold, design: .rounded))
-                .foregroundStyle(Color.white)
+                .foregroundStyle(theme.accentText)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .background(Color(red: 0.21, green: 0.17, blue: 0.14), in: Capsule())
+                .background(theme.accent, in: Capsule())
 
                 Button("Open System Settings") {
                     secondaryAction()
                 }
                 .buttonStyle(.plain)
                 .font(.system(size: 13, weight: .bold, design: .rounded))
-                .foregroundStyle(Color(red: 0.18, green: 0.14, blue: 0.11))
+                .foregroundStyle(theme.textPrimary)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .background(Color.white.opacity(0.74), in: Capsule())
+                .background(theme.chipFill, in: Capsule())
             }
         }
         .frame(maxWidth: .infinity, minHeight: 280, alignment: .topLeading)
         .padding(22)
         .background(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(Color.white.opacity(0.72))
+                .fill(theme.surfaceFill.opacity(theme.isLight ? 0.94 : 0.86))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(Color.white.opacity(0.6), lineWidth: 1)
+                .stroke(theme.surfaceStroke.opacity(theme.isLight ? 0.95 : 0.8), lineWidth: 1)
         )
     }
 }
@@ -200,6 +254,6 @@ struct GeneralSettingsView_Previews: PreviewProvider {
     static var previews: some View {
         GeneralSettingsTab()
             .padding(28)
-            .background(Color(red: 0.97, green: 0.95, blue: 0.92))
+            .background(Color.clear)
     }
 }

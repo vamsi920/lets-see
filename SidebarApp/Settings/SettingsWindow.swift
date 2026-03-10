@@ -2,23 +2,25 @@ import SwiftUI
 
 struct SettingsWindow: View {
     @ObservedObject private var model = AssistantAppModel.shared
+    @AppStorage(AppAppearanceMode.storageKey) private var appearanceModeRawValue = AppAppearanceMode.stored.rawValue
+
+    private var appearanceMode: AppAppearanceMode {
+        AppAppearanceMode(rawValue: appearanceModeRawValue) ?? .light
+    }
+
+    private var theme: AppThemePalette {
+        .make(appearanceMode)
+    }
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.97, green: 0.95, blue: 0.92),
-                    Color(red: 0.92, green: 0.90, blue: 0.86)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+            SpaceBackdropView()
 
             GeneralSettingsTab()
                 .padding(28)
         }
         .frame(width: 820, height: 640)
+        .preferredColorScheme(theme.isLight ? .light : .dark)
         .onAppear {
             model.refreshPermissions()
         }

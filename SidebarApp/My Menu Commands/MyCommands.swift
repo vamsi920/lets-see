@@ -4,21 +4,18 @@ struct MyCommands: Commands {
     private let model = AssistantAppModel.shared
 
     var body: some Commands {
-        CommandMenu("Assistant") {
-            Button("Toggle Assistant") {
-                model.togglePanel()
+        CommandMenu("LetsSee") {
+            Button("Open Full App") {
+                model.showMainWindow()
             }
-            .keyboardShortcut(.space, modifiers: [.option, .command])
+            .keyboardShortcut("1", modifiers: [.command])
 
-            Button("Show Permissions") {
-                SettingsWindow.show()
+            Button("Open Quick Launcher") {
+                model.showQuickLauncher()
             }
-            .keyboardShortcut(",", modifiers: [.command, .shift])
+            .keyboardShortcut(.space, modifiers: [.control, .option])
 
-            Divider()
-
-            Button("Run Current Command") {
-                model.showPanel()
+            Button("Run Current Prompt") {
                 model.runCurrentCommand()
             }
             .keyboardShortcut(.return, modifiers: [.command])
@@ -28,6 +25,13 @@ struct MyCommands: Commands {
             }
             .keyboardShortcut(".", modifiers: [.command])
             .disabled(!model.isRunning && !model.isListening)
+
+            Divider()
+
+            Button("Permissions") {
+                SettingsWindow.show()
+            }
+            .keyboardShortcut(",", modifiers: [.command])
         }
     }
 }

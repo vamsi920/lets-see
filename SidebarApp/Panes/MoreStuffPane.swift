@@ -1,60 +1,85 @@
 import SwiftUI
 
-struct ActivityRowView: View {
-    let item: ActivityItem
+struct RecentActivityCard: View {
+    let items: [ActivityItem]
+    @AppStorage(AppAppearanceMode.storageKey) private var appearanceModeRawValue = AppAppearanceMode.stored.rawValue
+
+    private var appearanceMode: AppAppearanceMode {
+        AppAppearanceMode(rawValue: appearanceModeRawValue) ?? .light
+    }
+
+    private var theme: AppThemePalette {
+        .make(appearanceMode)
+    }
+
+    private var recentItems: [ActivityItem] {
+        Array(items.suffix(3).reversed())
+    }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(item.tone.tint.opacity(0.16))
-
-                Image(systemName: item.symbol)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(item.tone.tint)
-            }
-            .frame(width: 38, height: 38)
-
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(item.title)
-                        .font(.system(size: 14, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
+        GlassPanel(cornerRadius: 28) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    Text("Recent activity")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(theme.textPrimary)
 
                     Spacer()
 
-                    Text(item.timestamp.formatted(date: .omitted, time: .shortened))
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.42))
+                    Text("\(items.count)")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(theme.textTertiary)
+                        .monospacedDigit()
                 }
 
-                Text(item.detail)
-                    .font(.system(size: 13, weight: .medium, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.68))
-                    .fixedSize(horizontal: false, vertical: true)
+                if recentItems.isEmpty {
+                    Text("No activity yet.")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(theme.textTertiary)
+                } else {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(recentItems) { item in
+                            HStack(alignment: .top, spacing: 10) {
+                                Circle()
+                                    .fill(itemColor(for: item))
+                                    .frame(width: 6, height: 6)
+                                    .padding(.top, 5)
+
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(item.title)
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(theme.textPrimary)
+                                        .lineLimit(1)
+
+                                    Text(item.detail)
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundStyle(theme.textTertiary)
+                                        .lineLimit(1)
+                                }
+                            }
+                        }
+                    }
+                }
             }
+            .padding(18)
         }
-        .padding(14)
-        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    private func itemColor(for item: ActivityItem) -> Color {
+        if case .neutral = item.tone {
+            return theme.textSecondary
+        }
+
+        return item.tone.tint
     }
 }
 
 struct MoreStuffPane: View {
+    @ObservedObject private var model = AssistantAppModel.shared
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("LetsSee Shell")
-                .font(.system(size: 24, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
-
-            Text("The template sidebar remains in the project as spare scaffolding, but the real product experience now lives in the floating panel.")
-                .font(.system(size: 14, weight: .medium, design: .rounded))
-                .foregroundStyle(.white.opacity(0.75))
-                .fixedSize(horizontal: false, vertical: true)
-
-            Spacer()
-        }
-        .padding(24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color.black.opacity(0.92))
+        RecentActivityCard(items: model.activityItems)
+            .padding()
+            .background(Color.clear)
     }
 }

@@ -1,93 +1,175 @@
 import SwiftUI
 
-struct RunStateCard: View {
-    let title: String
-    let detail: String
-    let isRunning: Bool
-    let isListening: Bool
-    let progress: Double
+struct QuickLauncherView: View {
+    @ObservedObject private var model = AssistantAppModel.shared
+    @AppStorage(AppAppearanceMode.storageKey) private var appearanceModeRawValue = AppAppearanceMode.stored.rawValue
+    @FocusState private var isInputFocused: Bool
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(accent.opacity(0.18))
-
-                    if isRunning || isListening {
-                        ProgressView()
-                            .controlSize(.small)
-                            .tint(accent)
-                    } else {
-                        Image(systemName: "checkmark.seal.fill")
-                            .font(.system(size: 20, weight: .bold))
-                            .foregroundStyle(accent)
-                    }
-                }
-                .frame(width: 42, height: 42)
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(title)
-                        .font(.system(size: 18, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-
-                    Text(detail)
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.72))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer()
-
-                Text(statusLabel)
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .foregroundStyle(accent)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(accent.opacity(0.12), in: Capsule())
-            }
-
-            ProgressView(value: max(progress, 0.02))
-                .tint(accent)
-
-            HStack(spacing: 8) {
-                cardPill(text: "Overlay ready")
-                cardPill(text: "Log streaming")
-                cardPill(text: isListening ? "Mic preview" : "Typed command")
-            }
-        }
-        .padding(18)
-        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
-        )
+    private var appearanceMode: AppAppearanceMode {
+        AppAppearanceMode(rawValue: appearanceModeRawValue) ?? .light
     }
 
-    private var accent: Color {
-        if isListening {
-            return Color(red: 0.99, green: 0.75, blue: 0.42)
-        }
+    private var theme: AppThemePalette {
+        .make(appearanceMode)
+    }
 
-        if isRunning {
-            return Color(red: 0.56, green: 0.73, blue: 1.0)
-        }
+    var body: some View {
+        ZStack {
+            FloatingAuraView()
 
-        return Color(red: 0.35, green: 0.82, blue: 0.64)
+            GlassPanel(cornerRadius: 30) {
+                VStack(spacing: 0) {
+                    HStack {
+                        HStack(spacing: 10) {
+                            BrandMark(size: 24)
+
+                            Text("Quick Launcher")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(theme.textPrimary)
+                        }
+
+                        Spacer()
+
+                        Text(model.hotKeySymbols)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(theme.textTertiary)
+                            .monospacedDigit()
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
+                    .padding(.bottom, 14)
+
+                    Divider()
+                        .overlay(theme.surfaceStroke.opacity(theme.isLight ? 0.8 : 1))
+
+                    HStack(alignment: .top, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            TextField("Ask the Mac to do something", text: $model.commandText)
+                                .textFieldStyle(.plain)
+                                .font(.system(size: 24, weight: .regular, design: .rounded))
+                                .foregroundStyle(theme.textPrimary)
+                                .focused($isInputFocused)
+                                .onSubmit {
+                                    model.runCurrentCommand()
+                                }
+
+                            Text(model.statusDetail)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(theme.textSecondary)
+                                .lineLimit(2)
+                        }
+
+                        Spacer(minLength: 0)
+
+                        Button {
+                            model.toggleMicrophone()
+                        } label: {
+                            Image(systemName: model.isListening ? "waveform.circle.fill" : "mic")
+                                .font(.system(size: 18, weight: .medium))
+                                .foregroundStyle(model.isListening ? theme.accent : theme.textSecondary)
+                                .frame(width: 44, height: 44)
+                                .background(theme.chipFill, in: Circle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 18)
+                    .padding(.bottom, 18)
+
+                    Divider()
+                        .overlay(theme.surfaceStroke.opacity(theme.isLight ? 0.8 : 1))
+
+                    HStack(spacing: 12) {
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(statusColor)
+                                .frame(width: 8, height: 8)
+
+                            Text(statusLabel)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(theme.textPrimary)
+                        }
+
+                        Spacer()
+
+                        if model.isRunning || model.isListening {
+                            Button("Stop") {
+                                model.stopRun()
+                            }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(theme.textSecondary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 9)
+                            .background(theme.chipFill, in: Capsule())
+                        }
+
+                        Button {
+                            model.runCurrentCommand()
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: model.isRunning ? "bolt.fill" : "arrow.up.right")
+                                    .font(.system(size: 11, weight: .semibold))
+
+                                Text(model.isRunning ? "Running" : "Run")
+                                    .font(.system(size: 12, weight: .semibold))
+                            }
+                            .foregroundStyle(theme.accentText)
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 9)
+                            .background(theme.accent, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(model.commandText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 14)
+                }
+            }
+            .frame(width: 760, height: 210)
+        }
+        .frame(width: 860, height: 260)
+        .preferredColorScheme(theme.isLight ? .light : .dark)
+        .onAppear {
+            DispatchQueue.main.async {
+                isInputFocused = true
+            }
+        }
+        .onChange(of: model.inputFocusTicket) { _ in
+            DispatchQueue.main.async {
+                isInputFocused = true
+            }
+        }
     }
 
     private var statusLabel: String {
-        if isListening { return "Listening" }
-        if isRunning { return "Running" }
+        if model.isListening {
+            return "Listening"
+        }
+
+        if model.isRunning {
+            return "Running"
+        }
+
         return "Ready"
     }
 
-    private func cardPill(text: String) -> some View {
-        Text(text)
-            .font(.system(size: 11, weight: .semibold, design: .rounded))
-            .foregroundStyle(.white.opacity(0.68))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(Color.white.opacity(0.06), in: Capsule())
+    private var statusColor: Color {
+        if model.isListening {
+            return theme.accent
+        }
+
+        if model.isRunning {
+            return Color(red: 0.43, green: 0.67, blue: 0.95)
+        }
+
+        return Color(red: 0.38, green: 0.77, blue: 0.61)
+    }
+}
+
+struct EmptyPane: View {
+    var body: some View {
+        QuickLauncherView()
+            .background(Color.clear)
     }
 }
